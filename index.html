@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+
+<!-- Mirrored from colordodge.com/PerlinShader/ by HTTrack Website Copier/3.x [XR&CO'2014], Mon, 19 Sep 2022 12:16:12 GMT -->
+<head>
+	<meta charset=utf-8>
+	<title>Perlin Shader</title>
+	<style>
+	body { margin: 0; overflow: hidden; background-color: black;}
+	canvas { width: 100%; height: 100% }
+
+	#brandTag
+	{
+		position: fixed;
+		display: block;
+		top: 0px;
+		left: 30px;
+		color: white;
+		background-color: rgba(50, 50, 50, 0.5);
+		z-index: 1000;
+		text-align: center;
+		padding: 12px 12px 12px 12px;
+		font-size: 18px;
+		font-family: "Helvetica", sans-serif;
+		transition-property: color, background-color, padding;
+		transition-duration: 0.3s;
+	}
+
+	#brandTag:hover
+	{
+		color: black;
+		background-color: white;
+		padding: 24px 12px 12px 12px;
+	}
+	</style>
+</head>
+<body>
+
+	<a href="http://www.colordodge.com/">
+		<div id="brandTag">Colordodge</div>
+	</a>
+	<script type="text/javascript">
+	document.onkeydown = function(e)
+	{
+		e = e || window.event;
+
+		if (e.keyCode == '72')
+		{
+			var brandTag = document.getElementById("brandTag");
+			if (brandTag.style.visibility == "hidden") {
+				brandTag.style.visibility = "visible";
+			} else {
+				brandTag.style.visibility = "hidden";
+			}
+		}
+	}
+	</script>
+
+
+	<script src="js/three.min.js"></script>
+	<script src="js/Color.js"></script>
+	<script src="js/controls/OrbitControls.js"></script>
+	<script src="js/dat.gui.min.js"></script>
+	<script src="js/stats.min.js"></script>
+	<script src="js/presets.js"></script>
+
+
+	<script id="fragShader" type="shader-code">
+
+	uniform float time;
+	uniform vec2 resolution;
+
+	uniform float shadowStrength;
+	uniform float vignette;
+
+	uniform vec3 mapRes;
+	uniform float mapT1;
+	uniform float mapT2;
+	uniform float mapT3;
+
+	uniform vec4 region1Res;
+	uniform vec4 region2Res;
+	uniform vec4 region3Res;
+	uniform vec4 region4Res;
+
+	uniform vec2 region1Thresh;
+	uniform vec2 region2Thresh;
+	uniform vec2 region3Thresh;
+	uniform vec2 region4Thresh;
+
+	uniform vec4 zone1ARes;
+	uniform vec3 zone1AColor;
+	uniform vec4 zone1AOptions;
+	uniform vec4 zone1BRes;
+	uniform vec3 zone1BColor;
+	uniform vec4 zone1BOptions;
+	uniform vec4 zone1CRes;
+	uniform vec3 zone1CColor;
+	uniform vec4 zone1COptions;
+
+	uniform vec4 zone2ARes;
+	uniform vec3 zone2AColor;
+	uniform vec4 zone2AOptions;
+	uniform vec4 zone2BRes;
+	uniform vec3 zone2BColor;
+	uniform vec4 zone2BOptions;
+	uniform vec4 zone2CRes;
+	uniform vec3 zone2CColor;
+	uniform vec4 zone2COptions;
+
+	uniform vec4 zone3ARes;
+	uniform vec3 zone3AColor;
+	uniform vec4 zone3AOptions;
+	uniform vec4 zone3BRes;
+	uniform vec3 zone3BColor;
+	uniform vec4 zone3BOptions;
+	uniform vec4 zone3CRes;
+	uniform vec3 zone3CColor;
+	uniform vec4 zone3COptions;
+
+	uniform vec4 zone4ARes;
+	uniform vec3 zone4AColor;
+	uniform vec4 zone4AOptions;
+	uniform vec4 zone4BRes;
+	uniform vec3 zone4BColor;
+	uniform vec4 zone4BOptions;
+	uniform vec4 zone4CRes;
+	uniform vec3 zone4CColor;
+	uniform vec4 zone4COptions;
+
+	int count = 0;
+
+	vec2 pos;
+
+
+	float SimplexPerlin3D( vec3 P )
+	{
+	    //  https://github.com/BrianSharpe/Wombat/blob/master/SimplexPerlin3D.glsl
+
+	    //  simplex math constants
+	    const float SKEWFACTOR = 1.0/3.0;
+	    const float UNSKEWFACTOR = 1.0/6.0;
+	    const float SIMPLEX_CORNER_POS = 0.5;
+	    const float SIMPLEX_TETRAHADRON_HEIGHT = 0.70710678118654752440084436210485;    // sqrt( 0.5 )
+
+	    //  establish our grid cell.
+	    P *= SIMPLEX_TETRAHADRON_HEIGHT;    // scale space so we can have an approx feature size of 1.0
+	    vec3 Pi = floor( P + dot( P, vec3( SKEWFACTOR) ) );
+
+	    //  Find the vectors to the corners of our simplex tetrahedron
+	    vec3 x0 = P - Pi + dot(Pi, vec3( UNSKEWFACTOR ) );
+	    vec3 g = step(x0.yzx, x0.xyz);
+	    vec3 l = 1.0 - g;
+	    vec3 Pi_1 = min( g.xyz, l.zxy );
+	    vec3 Pi_2 = max( g.xyz, l.zxy );
+	    vec3 x1 = x0 - Pi_1 + UNSKEWFACTOR;
+	    vec3 x2 = x0 - Pi_2 + SKEWFACTOR;
+	    vec3 x3 = x0 - SIMPLEX_CORNER_POS;
+
+	    //  pack them into a parallel-friendly arrangement
+	    vec4 v1234_x = vec4( x0.x, x1.x, x2.x, x3.x );
+	    vec4 v1234_y = vec4( x0.y, x1.y, x2.y, x3.y );
+	    vec4 v1234_z = vec4( x0.z, x1.z, x2.z, x3.z );
+
+	    // clamp the domain of our grid cell
+	    Pi.xyz = Pi.xyz - floor(Pi.xyz * ( 1.0 / 69.0 )) * 69.0;
+	    vec3 Pi_inc1 = step( Pi, vec3( 69.0 - 1.5 ) ) * ( Pi + 1.0 );
+
+	    //	generate the random vectors
+	    vec4 Pt = vec4( Pi.xy, Pi_inc1.xy ) + vec2( 50.0, 161.0 ).xyxy;
+	    Pt *= Pt;
+	    vec4 V1xy_V2xy = mix( Pt.xyxy, Pt.zwzw, vec4( Pi_1.xy, Pi_2.xy ) );
+	    Pt = vec4( Pt.x, V1xy_V2xy.xz, Pt.z ) * vec4( Pt.y, V1xy_V2xy.yw, Pt.w );
+	    const vec3 SOMELARGEFLOATS = vec3( 635.298681, 682.357502, 668.926525 );
+	    const vec3 ZINC = vec3( 48.500388, 65.294118, 63.934599 );
+	    vec3 lowz_mods = vec3( 1.0 / ( SOMELARGEFLOATS.xyz + Pi.zzz * ZINC.xyz ) );
+	    vec3 highz_mods = vec3( 1.0 / ( SOMELARGEFLOATS.xyz + Pi_inc1.zzz * ZINC.xyz ) );
+	    Pi_1 = ( Pi_1.z < 0.5 ) ? lowz_mods : highz_mods;
+	    Pi_2 = ( Pi_2.z < 0.5 ) ? lowz_mods : highz_mods;
+	    vec4 hash_0 = fract( Pt * vec4( lowz_mods.x, Pi_1.x, Pi_2.x, highz_mods.x ) ) - 0.49999;
+	    vec4 hash_1 = fract( Pt * vec4( lowz_mods.y, Pi_1.y, Pi_2.y, highz_mods.y ) ) - 0.49999;
+	    vec4 hash_2 = fract( Pt * vec4( lowz_mods.z, Pi_1.z, Pi_2.z, highz_mods.z ) ) - 0.49999;
+
+	    //	evaluate gradients
+	    vec4 grad_results = inversesqrt( hash_0 * hash_0 + hash_1 * hash_1 + hash_2 * hash_2 ) * ( hash_0 * v1234_x + hash_1 * v1234_y + hash_2 * v1234_z );
+
+	    //	Normalization factor to scale the final result to a strict 1.0->-1.0 range
+	    //	http://briansharpe.wordpress.com/2012/01/13/simplex-noise/#comment-36
+	    const float FINAL_NORMALIZATION = 37.837227241611314102871574478976;
+
+	    //  evaulate the kernel weights ( use (0.5-x*x)^3 instead of (0.6-x*x)^4 to fix discontinuities )
+	    vec4 kernel_weights = v1234_x * v1234_x + v1234_y * v1234_y + v1234_z * v1234_z;
+	    kernel_weights = max(0.5 - kernel_weights, 0.0);
+	    kernel_weights = kernel_weights*kernel_weights*kernel_weights;
+
+	    //	sum with the kernel and return
+
+	    float ret = dot( kernel_weights, grad_results ) * FINAL_NORMALIZATION;
+
+	    return (ret + 1.0) * 0.5;
+	}
+
+	///////////////////////////////////////
+
+	float aModb(float a, float b) {
+		return a - (b * floor(a/b));
+	}
+
+	vec3 zoneColor(vec4 res, vec3 c, vec4 op) {
+
+		vec3 retColor = vec3(0.0, 0.0, 0.0);
+
+		if (op.x == 1.0) {
+			// simple banding
+			float nMix = aModb( res.w, 1.0);
+			float n = SimplexPerlin3D(vec3(pos.x*res.x*1.0, pos.y*res.x*1.0, time*0.002 + res.z)) * (1.0 - nMix);
+			n += SimplexPerlin3D(vec3(pos.x*res.y*0.5, pos.y*res.y*0.5, time*0.003 + res.w)) * nMix;
+
+			float offset = 1.0 + ((op.z - 0.5) * 0.7);
+			vec3 c1 = normalize(vec3(c.r*offset, c.g*offset, c.b*offset));
+
+			float mixRatio = aModb( abs(n*op.y*1.5), 1.0);
+			retColor = mix(c, c1, mixRatio);
+		}
+		else if (op.x == 2.0) {
+			// double banding
+			float nMix = aModb( op.y, 1.0);
+			// nMix = 0.5;
+			float n1 = SimplexPerlin3D(vec3(pos.x*res.x*1.0, pos.y*res.x*1.0, time*0.002 + res.z));
+			float n2 = SimplexPerlin3D(vec3(pos.x*res.y*1.0, pos.y*res.y*1.0, time*0.001 + res.w));
+			float n3 = (n1 * (1.0 - nMix)) + (n2 * nMix);
+
+			vec3 c1 = c;
+			float offset = 1.0 - ( (op.w * 0.5) + 0.5 ) ;
+			vec3 c2 = vec3(c1.r*offset, c1.g*offset, c1.b*offset);
+			offset = 1.0 + ( (op.w * 0.8) + 0.2 ) ;
+			vec3 c3 = vec3(c1.r*offset, c1.g*offset, c1.b*offset);
+			c3 = normalize(c3);
+			c2 = normalize(c2);
+
+			float mixRatio = aModb( abs(n3*op.y*2.0), 1.0);
+			vec3 ct = mix(c1, c2, mixRatio);
+			mixRatio = aModb( abs(n3*res.w*4.0), 1.0);
+			retColor = mix(ct, c3, mixRatio);
+		}
+		else if (op.x == 3.0) {
+			// compound banding
+			float nMix = aModb( op.y, 1.0);
+			float n1 = SimplexPerlin3D(vec3(pos.x*res.x*5.0, pos.y*res.x*5.0, time*0.002 + res.z));
+			float n2 = SimplexPerlin3D(vec3(pos.x*res.y*2.0, pos.y*res.y*2.0, time*0.01 + res.w));
+
+			// float offset = 1.0 + ((op.z - 0.5) * 1.2);
+			// vec3 c2 = vec3(c.r*offset, c.g*offset, c.b*offset);
+			// offset = 1.0 + ((op.w - 0.5) * 1.2);
+			// vec3 c3 = vec3(c.r*offset, c.g*offset, c.b*offset);
+			// c3 = normalize(c3);
+			// c2 = normalize(c2);
+
+			float offset = 1.0 - ( (op.w * 0.5) + 0.5 ) ;
+			vec3 c2 = vec3(c.r*offset, c.g*offset, c.b*offset);
+			offset = 1.0 + ( (op.w * 0.5) + 0.5 ) ;
+			vec3 c3 = vec3(c.r*offset, c.g*offset, c.b*offset);
+			c3 = normalize(c3);
+			c2 = normalize(c2);
+
+			float mixRatio = aModb( abs(n1*(res.w+3.0)), 1.0);
+			vec3 ct = mix(c, c2, mixRatio);
+			mixRatio = aModb( abs(n2*(res.z+3.0)), 1.0);
+			retColor = mix(ct, c3, mixRatio);
+		}
+		else if (op.x == 4.0) {
+
+			// striping
+
+			float nMix = aModb( op.y, 1.0);
+			float n = SimplexPerlin3D(vec3(pos.x*res.x*2.0, pos.y*res.x*2.0, time*0.005 + res.z)) * (1.0 - nMix);
+			n += SimplexPerlin3D(vec3(pos.x*res.y*7.0, pos.y*res.y*7.0, time*0.01 + res.w)) * nMix;
+
+			float center = 0.5;
+			float width1 = op.z * 0.05;
+			float width2 = op.w * 0.2 + 0.05;
+
+			if (n > center-width1 && n < center+width1) {
+				retColor = vec3(c.r*1.2, c.g*1.2, c.b*1.2);
+				retColor = normalize(retColor);
+			}
+			else if (n > center-width2 && n < center+width2) {
+				retColor = c;
+			}
+			else {
+				float d = 0.5 - abs(n - 0.5);
+				d = 0.5;
+				retColor = vec3(c.r*d, c.g*d, c.b*d);
+			}
+
+		}
+		else if (op.x == 5.0) {
+
+			// speckled
+
+			float nMix = aModb( op.y, 1.0);
+			float n = SimplexPerlin3D(vec3(pos.x*res.y*25.0, pos.y*res.y*25.0, time*0.05 + res.z));
+			// n += SimplexPerlin3D(vec3(pos.x*res.y, pos.y*res.y, time*0.003 + res.w)) * nMix;
+
+			if (n > op.z) {
+				retColor = c;
+			} else {
+				retColor = vec3(c.r*0.4, c.g*0.4, c.b*0.4);
+			}
+
+		}
+
+		return retColor;
+	}
+
+	float regionNoise(vec4 res) {
+		float n = SimplexPerlin3D(vec3(pos.x*res.x, pos.y*res.x, time*0.004 + res.x*res.w)) * (1.0 - res.z);
+		n += SimplexPerlin3D(vec3(pos.x*res.y, pos.y*res.y, time*0.004 + res.y*res.w)) * res.z;
+		return n;
+	}
+
+	vec3 regionColorMix(vec3 c, float n, float t1, float t2) {
+		// float val = abs(n - t) * 2.0 - 0.5;
+		// return mix(c, vec3(0.0), val);
+
+		float range = t2 - t1;
+		float ratio = (n - t1) /  range;
+		ratio = (ratio - 0.5) * shadowStrength;
+		return mix(c, vec3(0.0), ratio);
+
+	}
+
+	vec3 zoneColorMix(vec3 c, float n, float t1, float t2) {
+		// float val = abs(n - t) * 2.0 - 0.5;
+		// return mix(c, vec3(0.0), val);
+
+		// float range = t2 - t1;
+		// float ratio = (n - t1) /  range;
+		// ratio = abs((ratio - 0.5)) * 2.0;
+		// ratio = ratio * ratio * 1.0;
+		// return mix(c, vec3(0.0), ratio);
+
+		float range = t2 - t1;
+		float ratio = (n - t1) /  range;
+		ratio = abs((ratio - 0.5)) * shadowStrength;
+		// ratio = ratio * ratio * 1.0;
+		return mix(c, vec3(0.0), ratio);
+
+	}
+
+	void main()
+	{
+		// normalize position and fix for aspect ratio
+		pos = gl_FragCoord.xy/resolution.xy;
+    pos = pos * 2.0 - 1.0;
+    pos.x *= resolution.x / resolution.y;
+
+		// float mapNoise = SimplexPerlin3D(vec3(pos.x*mapRes.x, pos.y*mapRes.x, time*0.002 + 3000.0)) * (1.0 - mapRes.z);
+		// mapNoise += SimplexPerlin3D(vec3(pos.x*mapRes.y, pos.y*mapRes.y, time*0.002 + 1000.0)) * mapRes.z;
+
+		float mapNoise = SimplexPerlin3D(vec3(pos.x*mapRes.x, pos.y*mapRes.x, time*0.002));
+
+		vec3 newColor = vec3(0.0, 0.0, 0.0);
+
+		if (mapNoise < mapT1) {
+
+			// region 1
+			float region1Noise = regionNoise(region1Res);
+
+			if (region1Noise < region1Thresh.x) {
+				// zone 1A
+				newColor = zoneColor(zone1ARes, zone1AColor, zone1AOptions);
+			}
+			else if (region1Noise < region1Thresh.y) {
+				// zone 1B
+				newColor = zoneColor(zone1BRes, zone1BColor, zone1BOptions);
+				newColor = zoneColorMix(newColor, region1Noise, region1Thresh.x, region1Thresh.y);
+			}
+			else {
+				// zone 1C
+				newColor = zoneColor(zone1CRes, zone1CColor, zone1COptions);
+			}
+
+			newColor = regionColorMix(newColor, mapNoise, 0.0, mapT1);
+		}
+		else if (mapNoise < mapT2) {
+
+			// region 2
+			float region2Noise = regionNoise(region2Res);
+
+			if (region2Noise < region2Thresh.x) {
+				// zone 2A
+				newColor = zoneColor(zone2ARes, zone2AColor, zone2AOptions);
+			}
+			else if (region2Noise < region2Thresh.y) {
+				// zone 2B
+				newColor = zoneColor(zone2BRes, zone2BColor, zone2BOptions);
+				newColor = zoneColorMix(newColor, region2Noise, region2Thresh.x, region2Thresh.y);
+			}
+			else {
+				// zone 2C
+				newColor = zoneColor(zone2CRes, zone2CColor, zone2COptions);
+			}
+
+			newColor = regionColorMix(newColor, mapNoise, mapT1, mapT2);
+		}
+		else if (mapNoise < mapT3) {
+
+			// region 3
+			float region3Noise = regionNoise(region3Res);
+
+			if (region3Noise < region3Thresh.x) {
+				// zone 3A
+				newColor = zoneColor(zone3ARes, zone3AColor, zone3AOptions);
+			}
+			else if (region3Noise < region3Thresh.y) {
+				// zone 3B
+				newColor = zoneColor(zone3BRes, zone3BColor, zone3BOptions);
+				newColor = zoneColorMix(newColor, region3Noise, region3Thresh.x, region3Thresh.y);
+			}
+			else {
+				// zone 3C
+				newColor = zoneColor(zone3CRes, zone3CColor, zone3COptions);
+			}
+
+			newColor = regionColorMix(newColor, mapNoise, mapT2, mapT3);
+		}
+		else {
+
+			// region 4
+			float region4Noise = regionNoise(region4Res);
+
+			if (region4Noise < region4Thresh.x) {
+				// zone 4A
+				newColor = zoneColor(zone4ARes, zone4AColor, zone4AOptions);
+			}
+			else if (region4Noise < region4Thresh.y) {
+				// zone 4B
+				newColor = zoneColor(zone4BRes, zone4BColor, zone4BOptions);
+				newColor = zoneColorMix(newColor, region4Noise, region4Thresh.x, region4Thresh.y);
+			}
+			else {
+				// zone 4C
+				newColor = zoneColor(zone4CRes, zone4CColor, zone4COptions);
+			}
+
+			newColor = regionColorMix(newColor, mapNoise, mapT3, 1.0);
+		}
+
+		float shade = distance(vec2(0.0, 0.0), pos) * 0.5;
+		shade = shade*shade;
+		newColor = mix(newColor, vec3(0.0), shade*vignette);
+
+		gl_FragColor = vec4(newColor, 1.0);
+	}
+
+
+
+</script>
+
+<script src="Zone.js"></script>
+<script src="Threshold.js"></script>
+<script src="Region.js"></script>
+<script src="script.js"></script>
+
+
+</body>
+
+<!-- Mirrored from colordodge.com/PerlinShader/ by HTTrack Website Copier/3.x [XR&CO'2014], Mon, 19 Sep 2022 12:16:21 GMT -->
+</html>
